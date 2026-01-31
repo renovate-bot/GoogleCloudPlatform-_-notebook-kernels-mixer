@@ -156,9 +156,13 @@ func (m *mockJupyter) insertKernel(k *resources.Kernel) (*resources.Kernel, erro
 	}
 	inserted := *k
 	inserted.ID = uuid.New().String()
+	// Return a kernel with an initial state of "starting"
 	inserted.ExecutionState = "starting"
 	inserted.LastActivity = time.Now().Format(time.RFC3339Nano)
-	m.kernels[inserted.ID] = &inserted
+	stored := inserted
+	// Store a kernel with the state "idle" so that later calls show the kernel as already started.
+	stored.ExecutionState = "idle"
+	m.kernels[inserted.ID] = &stored
 	return &inserted, nil
 }
 
@@ -277,7 +281,7 @@ func (h *KernelMessageHeader) Time() (time.Time, error) {
 func (m *mockJupyter) connectToKernel(w http.ResponseWriter, r *http.Request, kernelID string) {
 	log.Printf("Handling a websocket upgrade request: %+v", r)
 	m.mu.Lock()
-	_, ok := m.kernels[kernelID]
+	k, ok := m.kernels[kernelID]
 	m.mu.Unlock()
 	if !ok {
 		log.Printf("Kernel not found: %q", kernelID)
@@ -321,7 +325,7 @@ func (m *mockJupyter) connectToKernel(w http.ResponseWriter, r *http.Request, ke
 		MsgType: "status",
 		Channel: "iopub",
 		Content: map[string]any{
-			"execution_state": "idle",
+			"execution_state": k.ExecutionState,
 		},
 	}
 	initialMsgBytes, err := json.Marshal(initialMsg)
